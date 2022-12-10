@@ -9,6 +9,40 @@ pub type code_t = u16;
 #[allow(non_camel_case_types)]
 pub type register_t = u16;
 
+pub mod bit {
+    use super::addr_t;
+
+    #[inline(always)]
+    pub fn set(addr: addr_t, bit: u8) -> addr_t {
+        (addr | 1 << bit)
+    }
+    #[inline(always)]
+    pub fn clr(addr: addr_t, bit: u8) -> addr_t {
+        (addr & !(1 << bit))
+    }
+    #[inline(always)]
+    pub fn tog(addr: addr_t, bit: u8) -> addr_t {
+        (addr ^ 1 << bit)
+    }
+    #[inline(always)]
+    pub fn check(addr: addr_t, bit: u8) -> bool {
+        addr & 1 << bit != 0
+    }
+    pub mod mask {
+        pub fn set(x: u16, y: u16) -> u16 {
+            x | y
+        }
+        pub fn clr(x: u16, y: u16) -> u16 {
+            x & !y
+        }
+        pub fn tog(x: u16, y: u16) -> u16 {
+            x ^ y
+        }
+        pub fn cheak(x: u16, y: u16) -> bool {
+            x & y != 0
+        }
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Value {

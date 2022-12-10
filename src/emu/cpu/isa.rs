@@ -124,13 +124,15 @@ pub enum InstructionSet {
     HALT,
 
     IJMP,
-    IN(Register, u8),
+    IN(Register, Value),
     INC(Register),
 
     JMP(imm11),
 
+    LD(Register, Register),     // load indirect f/ data data[rd]
     LDD(Register, Value),         // Load direct f/ data space
     LDI(Register, Value),           // Load immediate
+    LDP(Register, Value),       // load direct f/ program space
     LSL(Register),              // Logical Shift Left
     LSR(Register),              // Logical Shift Right
 
@@ -152,8 +154,11 @@ pub enum InstructionSet {
     RJMP(imm11),
 
     SBIO(u8, u8),
-    SBR(Register, K),
+    SBR(Register, Value),
     SET(Register),
+    ST(Register, Register),     // store indirect to data mem
+    STD(Value, Register),       // store direct to data mem
+    STP(Value, Register),       // store direct to prog mem
     SUB(Register, Register),
     SUBI(Register, K),
 
@@ -176,14 +181,19 @@ pub trait ISA {
     fn add(&mut self, args: &[code_t]);
     fn addi(&mut self, args: &[code_t]);
     fn and(&mut self, args: &[code_t]);
+    fn bclr(&mut self, args: &[code_t]);
+    fn bset(&mut self, args: &[code_t]);
+    fn cbio(&mut self, args: &[code_t]);
     fn cbr(&mut self, args: &[code_t]);
     fn clr(&mut self, args: &[code_t]);
     fn com(&mut self, args: &[code_t]);
     fn dec(&mut self, args: &[code_t]);
     fn div(&mut self, args: &[code_t]);
     fn inc(&mut self, args: &[code_t]);
+    fn ld(&mut self, args: &[code_t]);
     fn ldd(&mut self, args: &[code_t]);
     fn ldi(&mut self, args: &[code_t]);
+    fn ldp(&mut self, args: &[code_t]);
     fn mov(&mut self, args: &[code_t]);
     fn mul(&mut self, args: &[code_t]);
 
@@ -192,6 +202,11 @@ pub trait ISA {
 
     fn push(&mut self, args: &[code_t]);
     fn pop(&mut self, args: &[code_t]);
+    fn sbio(&mut self, args: &[code_t]);
+    fn sbr(&mut self, args: &[code_t]);
+    fn st(&mut self, args: &[code_t]);
+    fn std(&mut self, args: &[code_t]);
+    fn stp(&mut self, args: &[code_t]);
     fn sub(&mut self, args: &[code_t]);
     fn subi(&mut self, args: &[code_t]);
 
@@ -199,6 +214,9 @@ pub trait ISA {
 
     // pseudocodes
     fn nop(&mut self, args: &[code_t]);
+    fn sei(&mut self, args: &[code_t]);
+    fn cli(&mut self, args: &[code_t]);
+    fn nor(&mut self, args: &[code_t]);
 
 }
 

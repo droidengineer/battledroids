@@ -1,7 +1,7 @@
 //! Implementation of addr_t -size hardware RegisterFile
 //!
 //! 
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Deref};
 use std::str::{FromStr};
 
 use enum_primitive::{*};
@@ -107,9 +107,17 @@ impl FromStr for Register {
     }
 }
 
-impl From<u16> for Register {
-    fn from(_: u16) -> Self {
+impl Deref for Register {
+    type Target = u16;
+
+    fn deref(&self) -> &u16 {
         todo!()
+    }
+}
+
+impl From<u16> for Register {
+    fn from(t: u16) -> Self {
+        Register::from_u16(t).unwrap()
     }
 }
 

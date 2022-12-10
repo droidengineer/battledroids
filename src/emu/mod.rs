@@ -21,7 +21,8 @@ pub use crate::emu::cart::Cartridge;
 // pub const MASK_EXT2: u16 = 0x600;
 
 pub const L1_CACHE_MAX: usize = 1024;
-pub const L2_CACHE_MAX: usize = 1024 * CPU_CORES;
+pub const L2_CACHE_MAX: usize = 1024 * CORE_THREADS;
+pub const L3_CACHE_MAX: usize = L2_CACHE_MAX * CPU_CORES;
 
 pub const SRAM_MAX: usize = 0x10000;    // 65536 (64k)
 pub const CART_MEM_MAX: usize = 0x10000;

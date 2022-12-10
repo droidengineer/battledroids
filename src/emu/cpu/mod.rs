@@ -8,6 +8,9 @@ pub mod cu;
 pub mod cmp;
 
 use std::fmt::Error;
+use std::ops::Deref;
+
+use enum_primitive::FromPrimitive;
 
 pub use crate::emu::cpu::pe::ProcessingElement;
 pub use crate::emu::cpu::cu::ComputeUnit;
@@ -20,17 +23,36 @@ pub enum Status {
     #[default] Running, BadMem, BadData, NoData,
     DivZero, BadOp, BadIdx, BadIPC, BadFct, Deadlock
 }
-
-#[derive(Debug)]
-pub enum SREG {
-    C = 1,  // carry flag 0x01
-    Z,      // zero flag 0x02
-    N,      // negative flag 0x04
-    V,      // Overflow 0x08
-    S,      // signed 0x10
-    H,      // half carry flag 0x20
-    T,      // transfer bit 0x40
-    I,      // global interrupt enable 0x80
+enum_from_primitive! {
+    #[derive(Debug, Copy, Clone)]
+    #[repr(u16)]
+    pub enum SREG {
+        C = 1,  // carry flag 0x01
+        Z,      // zero flag 0x02
+        N,      // negative flag 0x04
+        V,      // Overflow 0x08
+        S,      // signed 0x10
+        H,      // half carry flag 0x20
+        T,      // transfer bit 0x40
+        I,      // global interrupt enable 0x80
+    }
+}
+impl SREG {
+    pub fn offset(&self) -> usize {
+        *self as usize
+    }
+}
+impl Deref for SREG {
+    type Target = u16;
+    fn deref(&self) -> &u16 {
+        todo!()
+        //&(self.offset() as u16)
+    }
+}
+impl From<u16> for SREG {
+    fn from(t: u16) -> Self {
+        SREG::from_u16(t).unwrap()
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]

@@ -1,8 +1,8 @@
 //! Compute Unit
 //! 
+use std::rc::Rc;
 
 use crate::types::addr_t;
-
 use super::{ProcessingElement};
 
 
@@ -11,7 +11,7 @@ use super::{ProcessingElement};
 /// Manages work on the threads
 pub struct ComputeUnit {
     pub threads: Vec<ProcessingElement>,
-    pub cache: [addr_t; crate::emu::L2_CACHE_MAX],
+    pub cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>,
     pub id: u16,
     pub tracing: bool,
     num_threads: u8,
@@ -30,7 +30,12 @@ impl ComputeUnit {
         }
         println!("Spun up {n} threads");
 
-        ComputeUnit { threads, cache: [0; crate::emu::L2_CACHE_MAX], id: cu_id, tracing: false, num_threads: num_elem, }
+        ComputeUnit { threads, cache: Rc::new([0; crate::emu::L2_CACHE_MAX]), id: cu_id, tracing: false, num_threads: num_elem, }
+    }
+    pub fn postmortem(&self, pc: addr_t) {
+        for thread in self.threads.iter() {
+            thread.postmortem(pc);
+        }
     }
     pub fn next_pe_id(&mut self) -> u16 { self.num_threads += 1; self.num_threads as u16 }
     pub fn add_thread(&mut self, thread: ProcessingElement) {
