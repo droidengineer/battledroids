@@ -1,6 +1,8 @@
-use std::fmt;
-use crate::emu::cpu::register::Register;
+pub mod from_byte_code;
+pub mod to_byte_code;
 pub mod stack;
+
+use crate::emu::cpu::register::Register;
 
 #[allow(non_camel_case_types)]
 pub type addr_t = u16;
@@ -55,37 +57,3 @@ pub enum Value {
     Immediate(addr_t),
     IR, BP, SP, MP, PC,
 }
-
-/// A structure containing runnable or dumpable code
-/// from stack-vm
-pub struct Code {
-    pub symbols: Vec<(usize, String)>,
-    pub code: Vec<usize>,
-    pub data: Vec<addr_t>,
-    pub labels: Vec<(usize, String)>,
-}
-impl Code {
-    pub fn symbols(&self) -> &[(usize, String)] {
-        self.symbols.as_slice()
-    }
-    pub fn code(&self) -> &[usize] {
-        self.code.as_slice()
-    }
-    pub fn data(&self) -> &[addr_t] {
-        self.data.as_slice()
-    }
-    pub fn labels(&self) -> &[(usize, String)] {
-        self.labels.as_slice()
-    }
-    pub fn get_label_ip(&self, name: &str) -> Option<usize> {
-        for label in self.labels.as_slice() {
-            if label.1 == name {
-                return Some(label.0);
-            }
-        }
-        None
-    }
-}
-
-
-

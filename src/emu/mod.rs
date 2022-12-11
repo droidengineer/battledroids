@@ -1,5 +1,6 @@
 pub mod mem;
 pub mod cpu;
+pub mod code;
 pub mod machine;
 pub mod cart;
 

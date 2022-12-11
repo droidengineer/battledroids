@@ -111,7 +111,9 @@ impl Deref for Register {
     type Target = u16;
 
     fn deref(&self) -> &u16 {
+        let d = self.offset();
         todo!()
+    //    &u16::from(*self)
     }
 }
 
@@ -120,8 +122,13 @@ impl From<u16> for Register {
         Register::from_u16(t).unwrap()
     }
 }
+impl From<Register> for u16 {
+    fn from(r: Register) -> Self {
+        u16::from(r)
+    }
+}
 
-#[derive(Debug)]
+#[derive(Debug,Copy,Clone)]
 pub struct RegisterFile([addr_t; Register::MAX as usize]);
 impl Default for RegisterFile {
     fn default() -> RegisterFile {
@@ -142,3 +149,33 @@ impl IndexMut<Register> for RegisterFile {
     }
 }
 
+#[derive(Debug)]
+pub struct ShadowRegister {
+    pub bp: addr_t,
+    pub sp: addr_t,
+    pub mp: addr_t,
+    pub pc: addr_t,
+}
+impl ShadowRegister {
+    pub fn new() -> Self {
+        ShadowRegister { bp: 0, sp: 0, mp: 0, pc: 0 }
+    }
+    pub fn get(&self, r: Register) -> u16 {
+        match r {
+            Register::BP => self.bp,
+            Register::MP => self.mp,
+            Register::SP => self.sp,
+            Register::PC => self.pc,
+            _ => todo!()
+        }
+    }
+    pub fn set(&mut self, r: Register, v: register_t) {
+        match r {
+            Register::BP => self.bp = v,
+            Register::MP => self.mp = v,
+            Register::SP => self.sp = v,
+            Register::PC => self.pc = v,
+            _ => todo!()
+        }
+    }
+}

@@ -183,6 +183,7 @@ pub trait ISA {
     fn and(&mut self, args: &[code_t]);
     fn bclr(&mut self, args: &[code_t]);
     fn bset(&mut self, args: &[code_t]);
+    fn call(&mut self, args: &[code_t]);
     fn cbio(&mut self, args: &[code_t]);
     fn cbr(&mut self, args: &[code_t]);
     fn clr(&mut self, args: &[code_t]);
@@ -190,6 +191,7 @@ pub trait ISA {
     fn dec(&mut self, args: &[code_t]);
     fn div(&mut self, args: &[code_t]);
     fn inc(&mut self, args: &[code_t]);
+    fn jmp(&mut self, args: &[code_t]);   
     fn ld(&mut self, args: &[code_t]);
     fn ldd(&mut self, args: &[code_t]);
     fn ldi(&mut self, args: &[code_t]);
@@ -202,6 +204,7 @@ pub trait ISA {
 
     fn push(&mut self, args: &[code_t]);
     fn pop(&mut self, args: &[code_t]);
+    fn ret(&mut self, args: &[code_t]);
     fn sbio(&mut self, args: &[code_t]);
     fn sbr(&mut self, args: &[code_t]);
     fn st(&mut self, args: &[code_t]);

@@ -5,6 +5,7 @@
 //! and shares an L2 cache with other PEs in the `ComputeUnit`
 
 use std::arch::asm;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use num_traits::FromPrimitive;
@@ -17,7 +18,25 @@ use super::isa::{ISA, code_t };
 use super::Status;
 
 #[derive(Debug)]
-/// The basic unit of work. 
+pub struct CallFrame {
+    locals: HashMap<String, addr_t>,
+    pub ret_addr: addr_t,
+}
+impl CallFrame {
+    pub fn new(ret_addr: addr_t) -> Self {
+        CallFrame { locals: HashMap::new(), ret_addr }
+    }
+    pub fn get_local(&self, name: &str) -> Option<&addr_t> {
+        self.locals.get(name)
+    }
+    pub fn set_local(&mut self, name: &str, v: addr_t) {
+        self.locals.insert(String::from(name), v);
+    }
+}
+
+#[derive(Debug,Clone)]
+/// The basic unit of work. Analog to core threads.
+/// Contains all private memory location environments
 pub struct ProcessingElement {
     pub registers: RegisterFile,
     pub program: [addr_t; crate::emu::L1_CACHE_MAX],
@@ -29,13 +48,14 @@ pub struct ProcessingElement {
 }
 static mut pid: u16 = 1;
 impl ProcessingElement {
-    pub fn new(t: bool, ids: (u16,u16,u16, u16)) -> ProcessingElement {
+    pub fn new(cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>, t: bool, ids: (u16,u16,u16, u16)) -> ProcessingElement {
+        trace!("ProcessingElement::new({}, {}, {:?}", cache.len(), t, ids);
         let id = ids.3;
         ProcessingElement { 
             registers: RegisterFile::default(), 
             program: [0; crate::emu::L1_CACHE_MAX], 
             data: [0; crate::emu::L1_CACHE_MAX],
-            cache: Rc::new([0u16; crate::emu::L2_CACHE_MAX]),
+            cache,
             ids: (ids.0, ids.1, ids.2, id),
             tracing: t,
             status: Status::Running,
@@ -114,6 +134,10 @@ impl ProcessingElement {
     #[inline(always)]
     pub fn read_program(&self, i: u16) -> addr_t {
         self.program[i as usize]
+    }
+    #[inline(always)]
+    pub fn gpio(&mut self) -> &mut RegisterFile {
+        &mut self.registers
     }
     fn fetch(&mut self) -> addr_t {
         let instr = self.program[self.registers[Register::PC] as usize];
@@ -202,6 +226,10 @@ impl ISA for ProcessingElement {
     fn bset(&mut self, args: &[code_t]) {
         types::bit::set(self.registers[Register::SREG], args[0] as u8);
     }
+    #[inline(always)] /// *call k* |`PC = k`|**Call procedure**
+    fn call(&mut self, args: &[code_t]) {
+        todo!()
+    }
     #[inline(always)] /// *cbio reg_io, bit* - **Clear Bit In I/O Register**
     fn cbio(&mut self, args: &[code_t]) { 
         todo!()
@@ -238,6 +266,10 @@ impl ISA for ProcessingElement {
     fn inc(&mut self, args: &[u16]) {  
         let rd = Register::from_u16(args[0]).unwrap();   
         self.registers[rd] += 1;
+    }
+    #[inline(always)] /// *jmp k* |`PC = k`| **Jump to address**
+    fn jmp(&mut self, args: &[code_t]) {
+        todo!()
     }
     #[inline(always)] /// *ld rd, rs* |`Rd = data[Rs]`| **Load indirect f/ data space**
     fn ld(&mut self, args: &[code_t]) {
@@ -286,6 +318,10 @@ impl ISA for ProcessingElement {
     }
     #[inline(always)] /// *nor rd, rs* |`Rd = Rd ⊕ Rs`| **Logical Exclusive OR**
     fn nor(&mut self, args: &[code_t]) {
+        todo!()
+    }
+    #[inline(always)] /// *ret* |`PC = SP`| **Return from procedure**
+    fn ret(&mut self, args: &[code_t]) {
         todo!()
     }
     #[inline(always)] /// *sbio * |``| **Set Bit(s) in IO Register**
@@ -341,6 +377,7 @@ impl ISA for ProcessingElement {
     // pseudocode
     fn nop(&mut self, args: &[u16]) {
  //       self.addi(&[0,0]);
+        trace!("nop");
         unsafe { asm!("nop       ; NOP"); }
     }
     #[inline(always)] /// *cli* |`Rd = $FF - Rd`| **Clear Interrupt Enabled**

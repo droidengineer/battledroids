@@ -19,6 +19,7 @@ num-traits = "0.2"
 log = "0.4"
 pretty_env_logger = "*"
 
+# MsgPack
 rmp = "0.8"
 rand = "0.8"
 

@@ -4,8 +4,6 @@
 //! Taken in part from stack-vm
 
 use std::io::Read;
-use std::fmt;
-use super::Code;
 
 /// Convert from bytecode to a type
 ///
@@ -15,19 +13,25 @@ pub trait FromByteCode {
     fn from_byte_code(_: &mut dyn Read) -> Self;
 }
 
-impl<T: FromByteCode + fmt::Debug> FromByteCode for Code<T> {
-    fn from_byte_code(mut buf: &mut dyn Read) -> Code<T> {
-        let symbols: Vec<(usize, String)> = vec![];
-        let code: Vec<usize> = vec![];
-        let data: Vec<T> = vec![];
-        let labels: Vec<(usize, String)> = vec![];
-        Code {
-            symbols,
-            code,
-            data,
-            labels,
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rmp;
+
+    #[derive(PartialEq, Debug)]
+    struct Operand(i64);
+
+    impl FromByteCode for Operand {
+        fn from_byte_code(mut buf: &mut dyn Read) -> Operand {
+            let i = rmp::decode::read_int(&mut buf).unwrap();
+            Operand(i)
         }
     }
 
+    #[test]
+    fn from_byte_code() {
+        let bytecode = [0xd];
+        assert_eq!(Operand(13), Operand::from_byte_code(&mut &bytecode[..]));
+    }
 }

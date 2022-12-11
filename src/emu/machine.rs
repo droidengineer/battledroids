@@ -3,6 +3,8 @@
 use crate::emu::mem::SRAM;
 use crate::emu::{ComputeDevice, Status};
 
+use super::code::Code;
+
 #[derive(Debug)]
 pub struct Machine {
     pub cpu: ComputeDevice,
@@ -11,6 +13,7 @@ pub struct Machine {
     pub tracing: bool,
     pub curr_tick: usize,
     pub id: u8,
+    pub code: Code,
 }
 
 impl Machine {
@@ -22,6 +25,7 @@ impl Machine {
             tracing: t,
             curr_tick: 0,
             id: 1,
+            code: Code::new(),
         }
     }
 
@@ -33,7 +37,6 @@ impl Machine {
 
         self.curr_tick += 1;
         
-        Ok(Status::Running)
+        r // Ok(Status::Running)
     }
-
 }
