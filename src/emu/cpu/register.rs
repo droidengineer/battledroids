@@ -2,10 +2,10 @@
 //!
 //! 
 use std::ops::{Index, IndexMut, Deref};
-use std::str::{FromStr};
+use std::str::FromStr;
 
-use enum_primitive::{*};
-use num_traits::FromPrimitive;
+use enum_primitive::*;
+use num_traits::{FromPrimitive, ToPrimitive};
 
 use crate::types::*;
 
@@ -51,7 +51,7 @@ pub enum Register {
     R12 = 0xC, R13 = 0xD, R14 = 0xE, R15 = 0xF,
 
     /// Instruction Register
-    IR,
+    IP,
     /// Base Pointer 
     BP, 
     /// Stack Pointer
@@ -72,6 +72,10 @@ impl Register {
     pub fn offset(&self) -> usize {
         *self as usize
     }
+    pub fn encode(&self) -> u16 {
+        *self as u16
+    }
+ 
 }
 
 use std::fmt::Error;
@@ -95,7 +99,7 @@ impl FromStr for Register {
             "R13" => Ok(Register::R13),
             "R14" => Ok(Register::R14),
             "R15" => Ok(Register::R15),
-            "IR"  => Ok(Register::IR),
+            "IP"  => Ok(Register::IP),
             "BP"  => Ok(Register::BP),
             "SP"  => Ok(Register::SP),
             "MP"  => Ok(Register::MP),
@@ -107,12 +111,18 @@ impl FromStr for Register {
     }
 }
 
+// impl std::fmt::Display for Register {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         todo!()
+//     }
+// }
+
 impl Deref for Register {
     type Target = u16;
 
     fn deref(&self) -> &u16 {
-        let d = self.offset();
-        todo!()
+        let d = self.offset() as u16;
+        *&self
     //    &u16::from(*self)
     }
 }
@@ -124,7 +134,7 @@ impl From<u16> for Register {
 }
 impl From<Register> for u16 {
     fn from(r: Register) -> Self {
-        u16::from(r)
+        r.to_u16().unwrap()
     }
 }
 

@@ -44,7 +44,7 @@ impl Code {
             labels: vec![],
         }
     }
-    fn empty(&mut self) -> Code {
+    pub fn empty() -> Code {
         Code {
             symbols: vec![],
             code: vec![],
@@ -97,10 +97,24 @@ impl fmt::Debug for Code {
             if ip == len {
                 break;
             }
+            let opcode = self.code[ip];
+            ip += 1;
+
+            // print this instruction's name
+            for symbol in self.symbols() {
+                if opcode == symbol.0 {
+                    result.push_str(&format!("\t{}", symbol.1));
+                    break;
+                }
+            }
+
+            result.push('\n');
+            
         }
         write!(f, "{}", result)
     }
 }
+
 impl FromByteCode for Code {
     fn from_byte_code(mut buf: &mut dyn Read) -> Code {
         // uses a 4-element map

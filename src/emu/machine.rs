@@ -33,9 +33,10 @@ impl Machine {
         false
     }
     pub fn tick(&mut self) -> Result<Status, &'static str> {
+        self.curr_tick += 1;
+        trace!("Current Tick: {}",self.curr_tick);
         let r = self.cpu.tick();
 
-        self.curr_tick += 1;
         
         r // Ok(Status::Running)
     }

@@ -7,7 +7,6 @@ pub mod pe;
 pub mod cu;
 pub mod cmp;
 
-use std::fmt::Error;
 use std::ops::Deref;
 
 use enum_primitive::FromPrimitive;
@@ -16,18 +15,14 @@ pub use crate::emu::cpu::pe::ProcessingElement;
 pub use crate::emu::cpu::cu::ComputeUnit;
 pub use crate::emu::cpu::cmp::{ComputeGroup, ComputeDevice};
 pub use crate::emu::cpu::register::Register;
-use crate::types::addr_t;
 
 use self::register::ShadowRegister;
 
-use super::L3_CACHE_MAX;
-
-//let mut L3CACHE: [addr_t; L3_CACHE_MAX] = [0;L3_CACHE_MAX];
-
-#[derive(Debug, Default,Copy,Clone)]
+#[derive(Debug, Default,Copy,Clone, PartialEq)]
 pub enum Status {
-    #[default] Running, BadMem, BadData, NoData,
-    DivZero, BadOp, BadIdx, BadIPC, BadFct, Deadlock
+    #[default] Running, Halted, BadMem, BadData, NoData,
+    DivZero, BadOp, BadIdx, BadIPC, BadFct, Deadlock,
+    Sleeping
 }
 enum_from_primitive! {
     #[derive(Debug, Copy, Clone)]
@@ -193,12 +188,12 @@ impl ::std::str::FromStr for ProcID {
     }
 }
 
-static mut pe_count: u16 = 1;
-pub fn next_pe_id() -> u16 { unsafe { let ret = pe_count; pe_count += 1; ret } }
-static mut cu_count: u16 = 1;
-pub fn next_cu_id() -> u16 { unsafe { let ret = cu_count; cu_count += 1; ret } }
-static mut cg_count: u16 = 1;
-pub fn next_cg_id() -> u16 { unsafe { let ret = cg_count; cg_count += 1; ret } }
+// static mut pe_count: u16 = 1;
+// pub fn next_pe_id() -> u16 { unsafe { let ret = pe_count; pe_count += 1; ret } }
+// static mut cu_count: u16 = 1;
+// pub fn next_cu_id() -> u16 { unsafe { let ret = cu_count; cu_count += 1; ret } }
+// static mut cg_count: u16 = 1;
+// pub fn next_cg_id() -> u16 { unsafe { let ret = cg_count; cg_count += 1; ret } }
 static mut device_count: u16 = 1;
 pub fn next_device_id() -> u16 { unsafe { let ret = device_count; device_count += 1; ret } }
 

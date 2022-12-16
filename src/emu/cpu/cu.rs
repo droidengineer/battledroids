@@ -24,16 +24,22 @@ impl ComputeUnit {
         let mut threads = Vec::new();
         let cu_id = ids.2;
         let mut n = 0;
-        let L2CACHE: Rc<[addr_t; L2_CACHE_MAX]> = Rc::new([0;L2_CACHE_MAX]);
+        let L2_CACHE: Rc<[addr_t; L2_CACHE_MAX]> = Rc::new([0;L2_CACHE_MAX]);
         while n != num_elem {
-            let mut pe = ProcessingElement::new(Rc::clone(&L2CACHE), t,(ids.0,ids.1,cu_id,n as u16));
+            let mut pe = ProcessingElement::new(Rc::clone(&L2_CACHE), t,(ids.0,ids.1,cu_id,n as u16));
             let proc_id = pe.get_procid();
            println!("{} => {}", proc_id, proc_id.format());
             threads.push(pe);
             n += 1;
         }
         info!("Spun up {n} threads");
-        ComputeUnit {threads,cache:L2CACHE,id: cu_id, tracing: t, num_threads: num_elem}
+        ComputeUnit {threads,cache:L2_CACHE,id: cu_id, tracing: t, num_threads: num_elem}
+    }
+    pub fn tick(&mut self) -> bool {
+        for thread in self.threads.iter_mut() {
+            thread.tick();
+        }
+        true      
     }
     pub fn postmortem(&self, pc: addr_t) {
         for thread in self.threads.iter() {

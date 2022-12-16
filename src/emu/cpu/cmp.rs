@@ -2,9 +2,9 @@
 //! Integrates multiple `ComputeUnits`
 use std::rc::Rc;
 
-use crate::{emu::{L3_CACHE_MAX, CPU_CORES, Status, next_device_id}, types::addr_t};
+use crate::{emu::{L3_CACHE_MAX, CPU_CORES, Status, }, types::addr_t};
 
-use super::{ComputeUnit, next_cg_id};
+use super::ComputeUnit;
 
 
 #[derive(Debug)]
@@ -32,6 +32,11 @@ impl ComputeGroup {
 
         ComputeGroup { cores, id: cg_id, tracing: false, cache }
     }
+    pub fn tick(&mut self) {
+        for core in self.cores.iter_mut() {
+            core.tick();
+        }
+    }
     pub fn num_cores(&self) -> usize {
         self.cores.len()
     }
@@ -49,7 +54,7 @@ impl ComputeDevice {
     pub fn new(t: bool) -> ComputeDevice {
         trace!("ComputeDevice::new({t})");
         let mut cpu = Vec::new();
-        let id = next_device_id();
+        let id = super::next_device_id();
         let mut n = 0;
         // let new = ComputeDevice { cpu, id, tracing: t, cache: Self::get_cache(&mut self) };
         let cache = Rc::new([0; L3_CACHE_MAX]);
@@ -64,7 +69,9 @@ impl ComputeDevice {
     }
 
     pub fn tick(&mut self) -> Result<Status, &'static str> {
-
+        for elem in self.cpu.iter_mut() {
+            elem.tick();
+        }
         Ok(Status::Running)
     }
     pub fn push(&mut self, cpu: ComputeGroup) {

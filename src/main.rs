@@ -1,6 +1,6 @@
 
 use log::{log, debug, error, log_enabled, info, warn, trace, Level, max_level};
-use battledroids::{emu::machine::Machine, emu::cpu::{Register, isa::{InstructionSet, InstructionTable, InstructionType}}, types::Value};
+use battledroids::{emu::machine::Machine, emu::cpu::{Register, isa::{Instruction, InstructionTable, InstructionType}}, types::Value};
 
 fn main() {
     pretty_env_logger::init();
@@ -20,9 +20,9 @@ fn main() {
     trace!("{:?}", rc);
 
     if log_enabled!(Level::Debug) {
-        debug!("{:?}", InstructionSet::ADD(Register::R0, Register::R1));
-        warn!("{:?}", InstructionSet::ADDI(Register::R0, Value::Immediate(8)  ));
-        println!("{:?}", InstructionSet::NOP);
+        debug!("{:?}", Instruction::ADD(Register::R0, Register::R1));
+        warn!("{:?}", Instruction::ADDI(Register::R0, 8));
+        println!("{:?}", Instruction::NOP);
     }
 
     println!("Completed.");

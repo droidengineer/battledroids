@@ -10,14 +10,15 @@ use std::rc::Rc;
 
 use num_traits::FromPrimitive;
 
-use crate::types::{addr_t, Value, register_t, self};
+use crate::types::*;
 use crate::emu::cpu::SREG;
 use super::register::RegisterFile;
 use super::{ProcID, Register};
-use super::isa::{ISA, code_t };
+use super::isa::{ISA, Instruction, Instruction::*, MASK_OP, MASK_RD, MASK_RS, MASK_EXT, MASK_XD, op, };
 use super::Status;
 
 #[derive(Debug)]
+/// Used to hold local variables and return address for scopes
 pub struct CallFrame {
     locals: HashMap<String, addr_t>,
     pub ret_addr: addr_t,
@@ -39,8 +40,8 @@ impl CallFrame {
 /// Contains all private memory location environments
 pub struct ProcessingElement {
     pub registers: RegisterFile,
-    pub program: [addr_t; crate::emu::L1_CACHE_MAX],
-    pub data: [addr_t; crate::emu::L1_CACHE_MAX],
+    pub program: [addr_t; crate::emu::FLASH_MAX],
+    pub data: [addr_t; crate::emu::SRAM_MAX],
     pub cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>,
     pub ids: (u16,u16,u16,u16),
     pub tracing: bool,
@@ -50,16 +51,33 @@ static mut pid: u16 = 1;
 impl ProcessingElement {
     pub fn new(cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>, t: bool, ids: (u16,u16,u16, u16)) -> ProcessingElement {
         trace!("ProcessingElement::new({}, {}, {:?}", cache.len(), t, ids);
-        let id = ids.3;
         ProcessingElement { 
             registers: RegisterFile::default(), 
-            program: [0; crate::emu::L1_CACHE_MAX], 
-            data: [0; crate::emu::L1_CACHE_MAX],
+            program: [0; crate::emu::FLASH_MAX], 
+            data: [0; crate::emu::SRAM_MAX],
             cache,
-            ids: (ids.0, ids.1, ids.2, id),
+            ids: (ids.0, ids.1, ids.2, ids.3),
             tracing: t,
             status: Status::Running,
+        }  
+    }
+    pub fn tick(&mut self) -> bool {
+        if self.status == Status::Halted { return false; }
+        else if self.status != Status::Sleeping {
+            let code = self.fetch();
+            let mut instr = Instruction::UnknownOp(code);
+
+            if op::code::from(code).need_word() { 
+                let imm = self.fetch();
+                let code = ((code as u32) << 16) | (imm as u32);
+                instr = Instruction::from(code);
+            } else {
+                instr = Instruction::from(code);
+            }
+
+            self.handle_instruction(instr);
         }
+        true
     }
     pub fn postmortem(&self, pc: addr_t) {
         let pcstr = format!("at {} in current process", pc);
@@ -92,7 +110,7 @@ impl ProcessingElement {
             },
             Value::Immediate(n) => n,
             Value::Litteral(n) => n,
-            Value::IR => self.registers[Register::IR],
+            Value::IR => self.registers[Register::IP],
             Value::BP => self.registers[Register::BP],
             Value::SP => self.registers[Register::SP],
             Value::MP => self.registers[Register::MP],
@@ -115,7 +133,7 @@ impl ProcessingElement {
             },
             Value::Immediate(_) => (),
             Value::Litteral(_) => (),
-            Value::IR => self.registers[Register::IR] = v,
+            Value::IR => self.registers[Register::IP] = v,
             Value::BP => self.registers[Register::BP] = v,
             Value::SP => self.registers[Register::SP] = v,
             Value::MP => self.registers[Register::MP] = v,
@@ -124,9 +142,22 @@ impl ProcessingElement {
         }
     }
     #[inline(always)]
+    pub fn data(&self, i: addr_t) -> addr_t {
+        self.data[i as usize]
+    }
+    #[inline(always)]
+    pub fn set_data(&mut self, i: addr_t, v: addr_t) {
+        self.data[i as usize] = v;
+    }    
+
+    #[inline(always)]
     pub fn reg(&self, r: Register) -> register_t {
         self.registers[r]
     }    
+    #[inline(always)]
+    pub fn reg_mut(&mut self, r: Register) -> &mut register_t {
+        &mut self.registers[r]
+    }
     #[inline(always)]
     pub fn set_reg(&mut self, r: Register, i: register_t) {
         self.registers[r] = i;
@@ -139,6 +170,7 @@ impl ProcessingElement {
     pub fn gpio(&mut self) -> &mut RegisterFile {
         &mut self.registers
     }
+    #[inline(always)]
     fn fetch(&mut self) -> addr_t {
         let instr = self.program[self.registers[Register::PC] as usize];
         self.registers[Register::PC] += 1;
@@ -156,7 +188,12 @@ impl ProcessingElement {
         }
     } 
     fn next_proc_id(&mut self) -> u16 {
-       unsafe { let p = pid; pid += 1; p }
+       unsafe { 
+        static mut pid: u16 = 0;
+        let p = pid;
+        pid += 1;
+        p
+       }
     }
     #[inline(always)]
     fn sp(&self) -> addr_t { self.registers[Register::SP] }    
@@ -167,8 +204,13 @@ impl ProcessingElement {
     #[inline(always)]
     fn bp(&self) -> addr_t { self.registers[Register::BP] }
     #[inline(always)]
+    fn ip(&self) -> register_t { self.registers[Register::IP] }
+    #[inline(always)]
+    fn sreg(&mut self) -> &mut register_t { &mut self.registers[Register::IP] }
+
+    #[inline(always)]
     pub fn push(&mut self, v: u16) {
-        let sp = self.sp();
+        let sp = self.registers[Register::SP];
         self.data[sp as usize] = v;
         self.registers[Register::SP] = sp.wrapping_sub(1);
     }
@@ -188,12 +230,242 @@ impl ISA for ProcessingElement {
     fn version(&self) -> &str {
         "BattleDroid ISA v1.0"
     }
-    fn get_opcode(&self, instr: code_t) -> code_t {
-        (instr & super::isa::MASK_OP) >> 11
+    fn get_opcode(&self, instr: code_t) -> op::code {
+        let opcode = op::code::from(instr);
+        opcode
     }
-    fn decode(&self, instr: code_t) {
+    fn encode(&self, instr: Instruction) -> code_t {
         todo!()
     }
+    fn decode(&self, instr: code_t) -> Instruction{
+        let opcode = self.get_opcode(instr);
+
+        todo!()
+    }
+    // #[inline(always)]
+    // fn decode_r(&self, instr: code_t) -> (u8, u8, u8, u8) {
+    //     let opcode: u8 = ((instr & MASK_OP) >> 11).try_into().unwrap();
+    //     let rd: u8 = ((instr & MASK_RD) >> 7).try_into().unwrap();
+    //     let rs: u8 = ((instr & MASK_RS) >> 3).try_into().unwrap();
+    //     let ext: u8 = (instr & MASK_EXT).try_into().unwrap();
+    //     (opcode,rd,rs,ext)
+    // }
+    // #[inline(always)]
+    // fn decode_e(&self, instr: code_t) -> (u8, u8, u8) {
+    //     let opcode: u8 = ((instr & MASK_OP) >> 11).try_into().unwrap();
+    //     let xd: u8 = ((instr & MASK_XD) >> 8).try_into().unwrap();
+    //     let imm8: u8 = ((instr & 0xFF)).try_into().unwrap();
+    //     (opcode,xd,imm8)
+    // }
+    #[inline(always)]
+    /// Instruction handler
+    fn handle_instruction(&mut self, i: Instruction) {
+        trace!("ProcessingElement::handle_instruction({:?})", i);
+  //      assert_ne!(i,Instruction::UnknownOp(0));
+        debug!("Executing: {:?}", i);
+        match i {
+            ADD(rd, rs) => {
+                trace!("ADD {:?} {:?}", rd,rs);
+                self.registers[rd] = self.registers[rd].wrapping_add(self.reg(rs));
+                self.registers[Register::IP] += 1;
+            },
+            ADDI(rd,imm) => {
+                trace!("ADDI {:?} {imm}", rd);
+                self.registers[rd] = self.registers[rd].wrapping_add(imm);
+                self.registers[Register::IP] += 1;
+            },
+            AND(rd, rs) => {
+                trace!("AND {:?} {:?}", rd,rs);
+                self.registers[rd] = self.registers[rd] & self.registers[rs];
+                self.registers[Register::IP] += 1;
+            },
+            ASR(rs) => { todo!()},
+            BCLR(bit) => {
+                trace!("BCLR {bit}");
+                bit::clr(self.registers[Register::SREG], bit);
+                self.registers[Register::IP] += 1;
+            },
+            BREQ(imm) => { todo!() },
+            BRGE(imm) => { todo!() },
+            BRK => { todo!() },
+            BRLO(imm) => { todo!() },
+            BRLT(imm) => { todo!() },
+            BRNE(imm) => { todo!() },
+            BRSH(imm) => { todo!() },
+            BSET(bit) => {
+                trace!("BSET {bit}");
+                bit::set(self.registers[Register::SREG], bit);
+                self.registers[Register::IP] += 1;                
+            },
+            CALL(imm) => {
+                trace!("CALL {imm}");
+                let ret = self.ip() + 1;
+                self.push(ret);
+                // jump
+                self.registers[Register::IP] = imm;
+            },
+            CBIO(addr,bit) => { todo!() },
+            CBR(r,v) => { todo!() },
+            CLR(r) => { todo!() },
+            COM(r) => { 
+                trace!("COM {:?}({})",r,self.reg(r));
+                self.registers[r] = !self.reg(r);
+                self.registers[Register::IP] += 1;
+            },
+            CPI(r,K) => { todo!() },
+            CPSE(rd,rs) => { todo!() },
+            DEC(r) => {
+                trace!("DEC {:?}",r);
+                self.registers[r] = self.reg(r).wrapping_sub(1);
+                self.registers[Register::IP] += 1;
+            },
+            DIV(rd,rs) => {
+                trace!("DIV {:?}({}) {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                if self.reg(rs) == 0 {
+                    self.status = Status::DivZero;
+                    return;
+                }
+                self.registers[rd] = self.reg(rd) / self.reg(rs);
+                self.registers[Register::IP] += 1;
+            },
+            HALT => {
+                trace!("HALT");
+                self.status = Status::Halted;
+            },
+            IJMP => {
+                trace!("<TODO> IJMP");
+                todo!()
+            },
+            IN(rd, imm) => { todo!()},
+            INC(r) => {
+                trace!("INC {:?}({})",r,self.reg(r));
+                if self.reg(r) == register_t::MAX {
+                    self.status = Status::BadOp;
+                }
+                self.registers[r] = self.reg(r).wrapping_add(1);
+                self.registers[Register::IP] += 1;            
+            },
+            JMP(imm) => {
+                trace!("JMP {}",imm);
+                self.registers[Register::IP] = imm;
+            },
+            LD(rd,rs) => {
+                trace!("LD {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                self.registers[rd] = self.data[self.reg(rs) as usize];
+                self.registers[Register::IP] += 1; 
+            },
+            LDD(rd, imm) => {
+                trace!("LDD {:?}({}), {}",rd,self.reg(rd),imm);
+                self.registers[rd] = self.data[imm as usize];
+                self.registers[Register::IP] += 1; 
+            },
+            LDI(rd, imm) => {
+               trace!("LDI {:?}({}), {}",rd,self.reg(rd),imm);
+               self.registers[rd] = imm;
+               self.registers[Register::IP] += 1; 
+            },
+            LDP(rd, imm) => {
+                trace!("LDP {:?}({}), {}",rd,self.reg(rd),imm);
+                self.registers[rd] = self.program[imm as usize];
+                self.registers[Register::IP] += 1;            
+            },
+            LSL(r) => { todo!();
+            },
+            LSR(r) => { todo!(); },
+            MOV(rd, rs) => {
+                trace!("MOV {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                self.registers[rd] = self.registers[rs];
+                self.registers[Register::IP] += 1;            
+            },
+            MUL(rd, rs) => {
+                trace!("MUL {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                self.registers[rd] = (self.registers[rd] * self.registers[rs]) % u16::MAX;
+                self.registers[Register::IP] += 1;            
+            },
+            NEG(r) => {
+                trace!("NEG {:?}({})",r,self.reg(r));
+                self.registers[r] = (0 as i16).wrapping_sub(self.reg(r) as i16) as u16;
+                self.registers[Register::IP] = self.ip().wrapping_add(1);
+            },
+            NOP => {
+                trace!("NOP");
+                self.nop(&[0]);
+                self.registers[Register::IP] += 1;
+            },
+            OR(rd, rs) => {
+                trace!("OR {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                self.registers[rd] = (self.registers[rd] | self.registers[rs]) % u16::MAX;
+                self.registers[Register::IP] += 1;                  
+            },
+            ORI(rd,imm) => {
+                trace!("ORI {:?}({}), {}",rd,self.reg(rd),imm);
+                self.registers[rd] = self.registers[rd] | imm as u16;
+                self.registers[Register::IP] += 1;               
+            },
+            OUT(data, rd) => {
+                trace!("OUT {data}, {:?}", rd);
+                todo!();
+            },
+            POP(rd) => {
+                trace!("POP {:?}({})", rd, self.reg(rd));
+                let val = self.pop();
+                self.registers[rd] = val;
+                self.registers[Register::IP] += 1;               
+            },
+            PUSH(rd) => {
+                trace!("PUSH {:?}({})", rd, self.reg(rd));
+                let val = self.registers[rd];
+                self.push(val);
+                self.registers[Register::IP] += 1;               
+            },
+            RCALL(imm) => { todo!() },
+            RET => {
+                trace!("RET");
+                self.registers[Register::IP] = self.pop();
+            },
+            RJMP(imm) => { todo!(); },
+            SBIO(addr, bit) => {
+                todo!()
+            },
+            SBR(rd, bit) => {
+                trace!("SBR {:?}({}), {bit}", rd, self.reg(rd));
+                bit::set(self.registers[rd], bit);
+                self.registers[Register::IP] += 1;             
+            },
+            SET(rd) => {todo!();},
+            ST(rd, rs) => {
+                trace!("ST {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                self.data[self.reg(rs) as usize] = self.reg(rd);
+                self.registers[Register::IP] += 1;
+            },
+            STD(imm, rd) => {
+                trace!("STD {imm}, {:?}({})",rd,self.reg(rd));
+                self.data[self.reg(rd) as usize] = imm;
+                self.registers[Register::IP] += 1;
+            },
+            STP(imm, rd) => {
+                trace!("STP {imm}, {:?}({})",rd,self.reg(rd));
+                self.program[self.reg(rd) as usize] = imm;
+                self.registers[Register::IP] += 1;                
+            },
+            SUB(rd, rs) => {
+                trace!("SUB {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                self.registers[rd] = self.reg(rd).wrapping_sub(self.reg(rs));
+                self.registers[Register::IP] += 1;                
+            },
+            SUBI(rd, imm) => {
+                trace!("SUBI {:?}({}), {imm}",rd,self.reg(rd));
+                self.registers[rd] = self.reg(rd).wrapping_sub(imm);
+                self.registers[Register::IP] += 1;  
+            },
+            XOR(rd, rs) => {
+                trace!("XOR {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
+                self.registers[rd] = self.reg(rd) ^ self.reg(rs);
+                self.registers[Register::IP] += 1;                 
+            },
+            i@_ => panic!("ip: {:#x}, Unknown Instruction: {:?}",self.reg(Register::IP),i)
+        }
+    }    
     //
     fn halt(&self, args: &[u16]) {
         todo!()
@@ -210,9 +482,9 @@ impl ISA for ProcessingElement {
     #[inline(always)] /// *add rd, imm11* |`rd = rd + imm11`| **Add Immediate**
     fn addi(&mut self, args: &[u16]) {  
         let rd = Register::from_u16(args[0]).unwrap();
-        self.registers[rd] = self.reg(rd) + args[1];
+        //self.registers[rd] = self.rd + args[1];
     }
-    #[inline(always)] /// *and rd, rs* |`rd = rd & rs`| **Local AND**
+    #[inline(always)] /// *and rd, rs* reg(|`rd = rd & rs`| **Local AND**
     fn and(&mut self, args: &[u16]) {  // and rd, rs
         let rd = Register::from_u16(args[0]).unwrap();
         let rs = Register::from_u16(args[1]).unwrap();  
@@ -220,11 +492,11 @@ impl ISA for ProcessingElement {
     }
     #[inline(always)] /// *bclr bit* |`SREG &= !(1<<bit)`| **Clear bit in `SREG`**
     fn bclr(&mut self, args: &[code_t]) {
-        types::bit::clr(self.registers[Register::SREG], args[0] as u8);
+       bit::clr(self.registers[Register::SREG], args[0] as u8);
     }
     #[inline(always)] /// *bset bit* |`SREG |= 1<<bit`| **Set bit in `SREG`**
     fn bset(&mut self, args: &[code_t]) {
-        types::bit::set(self.registers[Register::SREG], args[0] as u8);
+        bit::set(self.registers[Register::SREG], args[0] as u8);
     }
     #[inline(always)] /// *call k* |`PC = k`|**Call procedure**
     fn call(&mut self, args: &[code_t]) {
@@ -237,7 +509,7 @@ impl ISA for ProcessingElement {
     #[inline(always)] /// *cbr rd, bit* |`rd &= !1<<bit`| **Clear bit in register
     fn cbr(&mut self, args: &[u16]) {  
         let rd = Register::from_u16(args[0]).unwrap();
-        types::bit::clr(self.registers[rd], args[0] as u8);
+        bit::clr(self.registers[rd], args[0] as u8);
     }
     #[inline(always)] /// *clr rd* |`SREG <TBD>`
     fn clr(&mut self, args: &[u16]) {  // clr rd

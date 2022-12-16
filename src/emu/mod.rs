@@ -25,7 +25,8 @@ pub const L1_CACHE_MAX: usize = 1024;
 pub const L2_CACHE_MAX: usize = 1024 * CORE_THREADS;
 pub const L3_CACHE_MAX: usize = L2_CACHE_MAX * CPU_CORES;
 
-pub const SRAM_MAX: usize = 0x10000;    // 65536 (64k)
+pub const SRAM_MAX: usize = 0x8000;    // 32768 (32k)
+pub const FLASH_MAX: usize = 0x10000;   // 65536 (64k)
 pub const CART_MEM_MAX: usize = 0x10000;
 pub const CPU_FREQ: usize = 25_000_000; // 25 MHz
 pub const CORE_THREADS: usize = 4;

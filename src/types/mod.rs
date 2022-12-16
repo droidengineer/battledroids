@@ -57,3 +57,21 @@ pub enum Value {
     Immediate(addr_t),
     IR, BP, SP, MP, PC,
 }
+impl Value {
+    pub fn value(&self) -> register_t {
+        match *self {
+            Value::Reg(r) => todo!(),
+            Value::AtReg(r) => todo!(),
+            Value::AtAddr(a) => todo!(),
+            Value::ProgMem(a) => todo!(),
+            Value::Peek(a) => todo!(),
+            Value::Litteral(a) => todo!(),
+            Value::Immediate(a) => todo!(),
+            Value::IR => todo!(),
+            Value::BP => todo!(),
+            Value::SP => todo!(),
+            Value::MP => todo!(),
+            Value::PC => todo!(),
+        }
+    } 
+}
