@@ -30,7 +30,8 @@ impl Machine {
     }
 
     pub fn init(&mut self) -> bool {
-        false
+        trace!("init(): self.code({:?})",self.code);
+        true
     }
     pub fn tick(&mut self) -> Result<Status, &'static str> {
         self.curr_tick += 1;

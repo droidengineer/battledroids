@@ -19,7 +19,7 @@ pub struct ComputeGroup {
 }
 impl ComputeGroup {
     pub fn new(num_cores: usize, cache: Rc<[addr_t; L3_CACHE_MAX]>,t: bool, ids: (u16,u16)) -> ComputeGroup {
-        trace!("ComputeGroup::new({:?}, {}, {} {:?}", num_cores, t, cache.len(), ids);
+        trace!("ComputeGroup::new({:?}, {}, {} {:?})", num_cores, t, cache.len(), ids);
         let mut cores = Vec::new();
         let cg_id = ids.1;
         let mut n: usize = 0;
@@ -76,6 +76,9 @@ impl ComputeDevice {
     }
     pub fn push(&mut self, cpu: ComputeGroup) {
         self.cpu.push(cpu);
+    }
+    pub fn refs(&self) -> usize {
+        Rc::strong_count(&self.cache)
     }
 }
 

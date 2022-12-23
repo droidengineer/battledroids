@@ -65,6 +65,10 @@ pub enum Register {
     /// CZNVSHTI
     SREG,
 
+    PE_ID, CU_ID, CG_ID, DEVICE_ID,
+
+    /// **I/O Registers*
+
     MAX
 } }
 
@@ -117,13 +121,19 @@ impl FromStr for Register {
 //     }
 // }
 
-impl Deref for Register {
-    type Target = u16;
+// impl Deref for Register {
+//     type Target = u16;
 
-    fn deref(&self) -> &u16 {
-        let d = self.offset() as u16;
-        *&self
-    //    &u16::from(*self)
+//     fn deref(&self) -> &u16 {
+//         let d = self.offset() as u16;
+//         &self.to_u16().unwrap()
+//     //    &u16::from(*self)
+//     }
+// }
+
+impl From<&str> for Register {
+    fn from(s: &str) -> Self {
+        Register::from_str(s).unwrap()
     }
 }
 
@@ -132,11 +142,12 @@ impl From<u16> for Register {
         Register::from_u16(t).unwrap()
     }
 }
-impl From<Register> for u16 {
-    fn from(r: Register) -> Self {
-        r.to_u16().unwrap()
-    }
-}
+// impl From<Register> for u16 {
+//     fn from(r: Register) -> Self {
+//         r
+//         //r.to_u16().unwrap()
+//     }
+// }
 
 #[derive(Debug,Copy,Clone)]
 pub struct RegisterFile([addr_t; Register::MAX as usize]);

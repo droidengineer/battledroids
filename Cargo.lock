@@ -37,6 +37,7 @@ dependencies = [
  "num-traits 0.2.15",
  "pretty_env_logger",
  "rand",
+ "regex",
  "rmp",
 ]
 

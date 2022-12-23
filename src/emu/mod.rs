@@ -3,6 +3,7 @@ pub mod cpu;
 pub mod code;
 pub mod machine;
 pub mod cart;
+pub mod builder;
 
 pub use crate::emu::cpu::register::RegisterFile;
 pub use crate::emu::cpu::*;
@@ -27,6 +28,7 @@ pub const L3_CACHE_MAX: usize = L2_CACHE_MAX * CPU_CORES;
 
 pub const SRAM_MAX: usize = 0x8000;    // 32768 (32k)
 pub const FLASH_MAX: usize = 0x10000;   // 65536 (64k)
+pub const INSTRUCTIONS_MAX: usize = FLASH_MAX >> 1;
 pub const CART_MEM_MAX: usize = 0x10000;
 pub const CPU_FREQ: usize = 25_000_000; // 25 MHz
 pub const CORE_THREADS: usize = 4;

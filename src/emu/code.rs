@@ -9,10 +9,13 @@ use std::{io::{Write,Read}, vec, fmt};
 
 use rmp::{decode,encode};
 
-use crate::types::{addr_t, from_byte_code::FromByteCode,to_byte_code::ToByteCode};
+use crate::types::{from_byte_code::FromByteCode,to_byte_code::ToByteCode, code_t, addr_t, table::Table};
+
+use super::{INSTRUCTIONS_MAX, isa::Instruction, builder::Builder};
 
 #[derive(PartialEq,Debug)]
-pub struct Operand(addr_t); 
+pub struct Operand(code_t); 
+
 impl FromByteCode for Operand {
     fn from_byte_code(mut buf: &mut dyn Read) -> Self {
         let value = decode::read_u16(&mut buf).unwrap();
@@ -30,8 +33,9 @@ impl ToByteCode for Operand {
 /// from stack-vm
 pub struct Code {
     pub symbols: Vec<(usize, String)>,
-    pub code: Vec<usize>,
-    pub data: Vec<Operand>,
+//    pub code: [Instruction; INSTRUCTIONS_MAX],
+    pub code: Vec<Instruction>,
+    pub data: Vec<addr_t>,
     pub labels: Vec<(usize, String)>,
 }
 
@@ -39,26 +43,27 @@ impl Code {
     pub fn new() -> Self {
         Code {
             symbols: vec![],
+ //           code: [Instruction::NOP; INSTRUCTIONS_MAX],
             code: vec![],
             data: vec![],
             labels: vec![],
         }
     }
-    pub fn empty() -> Code {
-        Code {
-            symbols: vec![],
-            code: vec![],
-            data: vec![],
-            labels: vec![],
-        }
-    }    
+    // pub fn empty() -> Code {
+    //     Code {
+    //         symbols: vec![],
+    //         code: [Instruction::NOP; INSTRUCTIONS_MAX],
+    //         data: vec![],
+    //         labels: vec![],
+    //     }
+    // }    
     pub fn symbols(&self) -> &[(usize, String)] {
         self.symbols.as_slice()
     }
-    pub fn code(&self) -> &[usize] {
+    pub fn code(&self) -> &[Instruction] {
         self.code.as_slice()
     }
-    pub fn data(&self) -> &[Operand] {
+    pub fn data(&self) -> &[addr_t] {
         self.data.as_slice()
     }
     pub fn labels(&self) -> &[(usize, String)] {
@@ -102,10 +107,11 @@ impl fmt::Debug for Code {
 
             // print this instruction's name
             for symbol in self.symbols() {
-                if opcode == symbol.0 {
-                    result.push_str(&format!("\t{}", symbol.1));
-                    break;
-                }
+                todo!()
+                // if opcode. == symbol.0 {
+                //     result.push_str(&format!("\t{}", symbol.1));
+                //     break;
+                // }
             }
 
             result.push('\n');
@@ -115,106 +121,129 @@ impl fmt::Debug for Code {
     }
 }
 
-impl FromByteCode for Code {
-    fn from_byte_code(mut buf: &mut dyn Read) -> Code {
-        // uses a 4-element map
-        let map_len = decode::read_map_len(&mut buf).unwrap();
-        assert_eq!(map_len, 4);
-
-        // -> code section
-        let section = read_string(&mut buf);
-        assert_eq!(section, "code");
-
-        let code_len = decode::read_array_len(&mut buf).unwrap();
-        let mut code: Vec<usize> = vec![];
-        for _i in 0..code_len {
-            code.push(decode::read_u16(&mut buf).unwrap() as usize);
-        }
-        // data section
-        let section = read_string(&mut buf);
-        assert_eq!(section, "data");
-        let data_len = decode::read_array_len(&mut buf).unwrap();
-        let mut data: Vec<Operand> = vec![];
-        for _i in 0..data_len {
-            data.push(FromByteCode::from_byte_code(&mut buf));
-        }
-
-        // symbols section
-        let section = read_string(&mut buf);
-        assert_eq!(section, "symbols");
-        let symbol_len = decode::read_array_len(&mut buf).unwrap();
-        let mut symbols: Vec<(usize, String)> = vec![];
-        for _i in 0..symbol_len {
-            let idx = decode::read_int(&mut buf).unwrap();
-            let symbol = read_string(&mut buf);
-            symbols.push((idx,symbol));
-        }
-        // labels section
-        let section = read_string(&mut buf);
-        assert_eq!(section, "labels");
-        let label_len = decode::read_array_len(&mut buf).unwrap();
+impl From<Builder> for Code {
+    fn from(builder: Builder) -> Code {
         let mut labels: Vec<(usize, String)> = vec![];
-        for _i in 0..label_len {
-            let idx = decode::read_int(&mut buf).unwrap();
-            let label = read_string(&mut buf);
-            labels.push((idx,label));
-        }       
+        for key in builder.labels.keys() {
+            let idx = builder.labels.get(&key).unwrap();
+            labels.push((*idx, key.clone()));
+        }
+        labels.sort_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
+
         Code {
-            symbols,
-            code,
-            data,
+            code: builder.instructions,
+            data: builder.data,
+            symbols: vec![],
             labels,
         }
     }
 }
 
+// impl FromByteCode for Code {
+//     fn from_byte_code(mut buf: &mut dyn Read) -> Code {
+//         trace!("from_byte_code()");
+//         // uses a 4-element map
+//         let map_len = decode::read_map_len(&mut buf).unwrap();
+//         assert_eq!(map_len, 4);
 
-impl ToByteCode for Code {
-    /// Create bytecode for this `Code`.
-    ///
-    /// Encodes into a Map of the following format:
-    /// ```json
-    /// {
-    ///     "code" => [ 0, 1, 0, 0, 1, 1, 1, 0 ],
-    ///     "data" => [ 123, 456 ],
-    ///     "symbols" => [ 0, "push", 1, "add" ],
-    ///     "labels" => [ 0, "main" ]
-    /// }
-    ///    
-    fn to_byte_code(&self, mut buf: &mut dyn Write) {
-        trace!("to_byte_code()");
-        // Write a 4-element map
-        encode::write_map_len(&mut buf, 4).unwrap();
+//         // -> code section
+//         let section = read_string(&mut buf);
+//         assert_eq!(section, "code");
 
-        // code section
-        encode::write_str(&mut buf, "code").unwrap();
-        encode::write_array_len(&mut buf, self.code.len() as u32).unwrap();
-        for operation in self.code() {
-            encode::write_u16(&mut buf, *operation as u16).unwrap();
-        }
+//         let code_len = decode::read_array_len(&mut buf).unwrap();
+//         let mut code: Vec<Instruction> = vec![];
+//         for _i in 0..code_len {
+//             todo!()
+//             //code.push(decode::read_u16(&mut buf).unwrap() as usize);
+//         }
+//         // data section
+//         let section = read_string(&mut buf);
+//         assert_eq!(section, "data");
+//         let data_len = decode::read_array_len(&mut buf).unwrap();
+//         let mut data: Vec<Operand> = vec![];
+//         for _i in 0..data_len {
+//             data.push(FromByteCode::from_byte_code(&mut buf));
+//         }
 
-        // data section
-        encode::write_str(&mut buf, "data").unwrap();
-        encode::write_array_len(&mut buf, self.data.len() as u32).unwrap();
-        for operand in self.data() {
-            encode::write_u16(&mut buf, operand.0).unwrap();
-        }
-        // symbols section
-        encode::write_str(&mut buf, "symbols").unwrap();
-        encode::write_array_len(&mut buf, self.symbols.len() as u32).unwrap();
-        for symbol in self.symbols() {
-            encode::write_u16(&mut buf, symbol.0 as u16).unwrap();
-            encode::write_str(&mut buf, &symbol.1).unwrap();
-        }
-        // labels section
-        encode::write_str(&mut buf, "labels").unwrap();
-        encode::write_array_len(&mut buf, self.labels.len() as u32).unwrap();
-        for label in self.labels() {
-            encode::write_u16(&mut buf, label.0 as u16).unwrap();
-            encode::write_str(&mut buf, &label.1).unwrap();
-        }
-    }
-}
+//         // symbols section
+//         let section = read_string(&mut buf);
+//         assert_eq!(section, "symbols");
+//         let symbol_len = decode::read_array_len(&mut buf).unwrap();
+//         let mut symbols: Vec<(usize, String)> = vec![];
+//         for _i in 0..symbol_len {
+//             let idx = decode::read_int(&mut buf).unwrap();
+//             let symbol = read_string(&mut buf);
+//             symbols.push((idx,symbol));
+//         }
+//         // labels section
+//         let section = read_string(&mut buf);
+//         assert_eq!(section, "labels");
+//         let label_len = decode::read_array_len(&mut buf).unwrap();
+//         let mut labels: Vec<(usize, String)> = vec![];
+//         for _i in 0..label_len {
+//             let idx = decode::read_int(&mut buf).unwrap();
+//             let label = read_string(&mut buf);
+//             labels.push((idx,label));
+//         }
+//         let mut ca: [Instruction; INSTRUCTIONS_MAX] = [Instruction::NOP; INSTRUCTIONS_MAX];
+//         code.resize(INSTRUCTIONS_MAX,Instruction::NOP);
+//         ca.copy_from_slice(&code);
+//         Code {
+//             symbols,
+//             code: ca,
+//             data,
+//             labels,
+//         }
+//     }
+// }
+
+
+// impl ToByteCode for Code {
+//     /// Create bytecode for this `Code`.
+//     ///
+//     /// Encodes into a Map of the following format:
+//     /// ```json
+//     /// {
+//     ///     "code" => [ 0, 1, 0, 0, 1, 1, 1, 0 ],
+//     ///     "data" => [ 123, 456 ],
+//     ///     "symbols" => [ 0, "push", 1, "add" ],
+//     ///     "labels" => [ 0, "main" ]
+//     /// }
+//     ///    
+//     fn to_byte_code(&self, mut buf: &mut dyn Write) {
+//         trace!("to_byte_code()");
+//         // Write a 4-element map
+//         encode::write_map_len(&mut buf, 4).unwrap();
+
+//         // code section
+//         encode::write_str(&mut buf, "code").unwrap();
+//         encode::write_array_len(&mut buf, self.code.len() as u32).unwrap();
+//         for operation in self.code() {
+//             encode::write_u16(&mut buf, operation.encode()).unwrap();
+//         }
+
+//         // data section
+//         encode::write_str(&mut buf, "data").unwrap();
+//         encode::write_array_len(&mut buf, self.data.len() as u32).unwrap();
+//         for operand in self.data() {
+//             encode::write_u16(&mut buf, operand.0).unwrap();
+//         }
+//         // symbols section
+//         encode::write_str(&mut buf, "symbols").unwrap();
+//         encode::write_array_len(&mut buf, self.symbols.len() as u32).unwrap();
+//         for symbol in self.symbols() {
+//             encode::write_u16(&mut buf, symbol.0 as u16).unwrap();
+//             encode::write_str(&mut buf, &symbol.1).unwrap();
+//         }
+//         // labels section
+//         encode::write_str(&mut buf, "labels").unwrap();
+//         encode::write_array_len(&mut buf, self.labels.len() as u32).unwrap();
+//         for label in self.labels() {
+//             encode::write_u16(&mut buf, label.0 as u16).unwrap();
+//             encode::write_str(&mut buf, &label.1).unwrap();
+//         }
+//     }
+// }
 
 fn read_string(mut buf: &mut dyn Read) -> String {
     let len = decode::read_str_len(&mut buf).unwrap();

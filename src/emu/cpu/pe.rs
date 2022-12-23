@@ -9,7 +9,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use num_traits::FromPrimitive;
+use regex::internal::Inst;
 
+use crate::emu::{INSTRUCTIONS_MAX, SRAM_MAX, L2_CACHE_MAX, FLASH_MAX};
+use crate::emu::builder::Builder;
 use crate::types::*;
 use crate::emu::cpu::SREG;
 use super::register::RegisterFile;
@@ -37,13 +40,20 @@ impl CallFrame {
 
 #[derive(Debug,Clone)]
 /// The basic unit of work. Analog to core threads.
-/// Contains all private memory location environments
+/// Contains all private memory location environments.
+/// 
+/// * A `RegisterFile` containing all GPIO and special registers.
+/// * A separate program and data space
+/// * A shared L2 cache
+/// * A tuple of Ownership ID's
+/// * A `Status` used for state checking
 pub struct ProcessingElement {
     pub registers: RegisterFile,
     pub program: [addr_t; crate::emu::FLASH_MAX],
     pub data: [addr_t; crate::emu::SRAM_MAX],
     pub cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>,
-    pub ids: (u16,u16,u16,u16),
+    pub code: [Instruction; INSTRUCTIONS_MAX],
+ //   pub ids: (u16,u16,u16,u16),
     pub tracing: bool,
     pub status: Status,
 }
@@ -51,15 +61,34 @@ static mut pid: u16 = 1;
 impl ProcessingElement {
     pub fn new(cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>, t: bool, ids: (u16,u16,u16, u16)) -> ProcessingElement {
         trace!("ProcessingElement::new({}, {}, {:?}", cache.len(), t, ids);
+        let mut registers = RegisterFile::default();
+        registers[Register::PE_ID] = ids.3;
+        registers[Register::CU_ID] = ids.2;
+        registers[Register::CG_ID] = ids.1;
+        registers[Register::DEVICE_ID] = ids.0;
         ProcessingElement { 
-            registers: RegisterFile::default(), 
+            registers, 
             program: [0; crate::emu::FLASH_MAX], 
             data: [0; crate::emu::SRAM_MAX],
             cache,
-            ids: (ids.0, ids.1, ids.2, ids.3),
+            code: [Instruction::NOP; INSTRUCTIONS_MAX],
+     //       ids: (ids.0, ids.1, ids.2, ids.3),
             tracing: t,
             status: Status::Running,
         }  
+    }
+    pub fn tick_from_code(&mut self) -> bool {
+        if self.status == Status::Halted { return false; }
+        else if self.status != Status::Sleeping {
+            let instr = self.fetch_from_code();
+            println!("fetched: {:?}", instr);
+            if instr == Instruction::NOP {
+                return false;
+            }
+            self.handle_instruction(instr);
+
+        }
+        true
     }
     pub fn tick(&mut self) -> bool {
         if self.status == Status::Halted { return false; }
@@ -141,6 +170,7 @@ impl ProcessingElement {
 
         }
     }
+
     #[inline(always)]
     pub fn data(&self, i: addr_t) -> addr_t {
         self.data[i as usize]
@@ -171,6 +201,12 @@ impl ProcessingElement {
         &mut self.registers
     }
     #[inline(always)]
+    fn fetch_from_code(&mut self) -> Instruction {
+        let instr = self.code[self.registers[Register::IP] as usize];
+        self.registers[Register::IP] += 1;
+        instr
+    }
+    #[inline(always)]
     fn fetch(&mut self) -> addr_t {
         let instr = self.program[self.registers[Register::PC] as usize];
         self.registers[Register::PC] += 1;
@@ -180,10 +216,10 @@ impl ProcessingElement {
 
         ProcID {
             instance_id: self.next_proc_id(),
-            pe_id: self.ids.3,
-            cu_id: self.ids.2,
-            cg_id: self.ids.1,
-            device_id: self.ids.0,
+            pe_id: self.registers[Register::PE_ID],
+            cu_id: self.registers[Register::CU_ID],
+            cg_id: self.registers[Register::CG_ID],
+            device_id: self.registers[Register::DEVICE_ID],
             machine_id: 1,
         }
     } 
@@ -220,6 +256,15 @@ impl ProcessingElement {
         let ret = self.data[sp as usize];
         self.registers[Register::SP] = sp;
         ret
+    }
+    pub fn from_builder(&mut self, builder: &Builder) {
+        trace!("from_builder({:?}",builder);
+        let mut code = &mut builder.instructions.clone();
+        code.resize(INSTRUCTIONS_MAX, NOP);
+        self.code.copy_from_slice(&code);
+        let mut data = &mut builder.data.clone();
+        data.resize(SRAM_MAX, 0);
+        self.data.copy_from_slice(&data);
     }
     
 }
@@ -662,5 +707,82 @@ impl ISA for ProcessingElement {
         self.bset(&[u16::from(*SREG::I)]);
     }
 
+
+}
+impl Default for ProcessingElement {
+    fn default() -> Self {
+        Self { 
+            registers: Default::default(), 
+            program: [0; FLASH_MAX], 
+            data: [0; SRAM_MAX], 
+            cache: Rc::new([0; L2_CACHE_MAX]), 
+            code: [NOP; INSTRUCTIONS_MAX], 
+            tracing: true, 
+            status: Status::Running 
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{emu::{builder::Builder, Register, isa::ISA}, asm::Instruction};
+
+    use super::ProcessingElement;
+
+
+    #[test]
+    fn from_builder() {
+        let mut bldr = Builder::new();
+        bldr.push("LDI R0, 100");
+        bldr.push("LDI R1, 23");
+        bldr.push("ADD R0, R1");
+        let mut pe = ProcessingElement::default();
+        pe.from_builder(&bldr);
+        assert_eq!(pe.code[0],super::Instruction::LDI(crate::emu::Register::R0,100));
+        assert_eq!(pe.code[1],super::Instruction::LDI(crate::emu::Register::R1,23));
+        assert_eq!(pe.code[2],super::Instruction::ADD(crate::emu::Register::R0,crate::emu::Register::R1));
+    }
+    #[test]
+    fn fetch_from_code() {
+        let mut bldr = Builder::new();
+        bldr.push("LDI R0, 100");
+        bldr.push("LDI R1, 23");
+        bldr.push("ADD R0, R1");
+        let mut pe = ProcessingElement::default();
+        pe.from_builder(&bldr);
+        let instr = pe.fetch_from_code();
+        println!("instr: {:?}", instr);
+        let instr = pe.fetch_from_code();
+        println!("instr: {:?}", instr);
+        let instr = pe.fetch_from_code();
+        println!("instr: {:?}", instr);
+    }
+    #[test]
+    fn instruction_test() {
+        let mut bldr = Builder::new();
+        bldr.push("LDI R0, 100");
+        bldr.push("LDI R1, 23");
+        bldr.push("ADD R0, R1");
+        bldr.push("SUBI R0, 25");
+        let mut pe = ProcessingElement::default();
+        pe.from_builder(&bldr);
+        for i in pe.code {
+            println!("instr: {:?}", i);
+            if i == Instruction::NOP { break; }            
+            pe.handle_instruction(i);
+            println!("R0[{}] R1[{}]", pe.reg(Register::R0), pe.reg(Register::R1));
+
+
+        }
+        // loop {
+        //     let mut i = pe.fetch_from_code();
+        //     while i != Instruction::NOP {
+        //         pe.handle_instruction(i);
+        //         println!("instr: {:?}", i);
+        //         println!("R0[{}] R1[{}]", pe.reg(Register::R0), pe.reg(Register::R1));
+        //         i = pe.fetch_from_code();
+        //     }
+        // } 
+    }
 
 }
