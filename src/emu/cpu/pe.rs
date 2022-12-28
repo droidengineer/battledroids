@@ -53,14 +53,13 @@ pub struct ProcessingElement {
     pub data: [addr_t; crate::emu::SRAM_MAX],
     pub cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>,
     pub code: [Instruction; INSTRUCTIONS_MAX],
- //   pub ids: (u16,u16,u16,u16),
     pub tracing: bool,
     pub status: Status,
 }
 static mut pid: u16 = 1;
 impl ProcessingElement {
     pub fn new(cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>, t: bool, ids: (u16,u16,u16, u16)) -> ProcessingElement {
-        trace!("ProcessingElement::new({}, {}, {:?}", cache.len(), t, ids);
+        trace!("ProcessingElement::new({}, {}, {:?})", cache.len(), t, ids);
         let mut registers = RegisterFile::default();
         registers[Register::PE_ID] = ids.3;
         registers[Register::CU_ID] = ids.2;
@@ -71,8 +70,7 @@ impl ProcessingElement {
             program: [0; crate::emu::FLASH_MAX], 
             data: [0; crate::emu::SRAM_MAX],
             cache,
-            code: [Instruction::NOP; INSTRUCTIONS_MAX],
-     //       ids: (ids.0, ids.1, ids.2, ids.3),
+            code: [Instruction::HALT; INSTRUCTIONS_MAX],
             tracing: t,
             status: Status::Running,
         }  
@@ -82,7 +80,7 @@ impl ProcessingElement {
         else if self.status != Status::Sleeping {
             let instr = self.fetch_from_code();
             println!("fetched: {:?}", instr);
-            if instr == Instruction::NOP {
+            if instr == Instruction::HALT {
                 return false;
             }
             self.handle_instruction(instr);
@@ -202,6 +200,7 @@ impl ProcessingElement {
     }
     #[inline(always)]
     fn fetch_from_code(&mut self) -> Instruction {
+        trace!("fetch_from_code(): ip: {:X}", self.ip());
         let instr = self.code[self.registers[Register::IP] as usize];
         self.registers[Register::IP] += 1;
         instr
@@ -242,7 +241,7 @@ impl ProcessingElement {
     #[inline(always)]
     fn ip(&self) -> register_t { self.registers[Register::IP] }
     #[inline(always)]
-    fn sreg(&mut self) -> &mut register_t { &mut self.registers[Register::IP] }
+    fn sreg(&mut self) -> &mut register_t { &mut self.registers[Register::SREG] }
 
     #[inline(always)]
     pub fn push(&mut self, v: u16) {
@@ -287,21 +286,7 @@ impl ISA for ProcessingElement {
 
         todo!()
     }
-    // #[inline(always)]
-    // fn decode_r(&self, instr: code_t) -> (u8, u8, u8, u8) {
-    //     let opcode: u8 = ((instr & MASK_OP) >> 11).try_into().unwrap();
-    //     let rd: u8 = ((instr & MASK_RD) >> 7).try_into().unwrap();
-    //     let rs: u8 = ((instr & MASK_RS) >> 3).try_into().unwrap();
-    //     let ext: u8 = (instr & MASK_EXT).try_into().unwrap();
-    //     (opcode,rd,rs,ext)
-    // }
-    // #[inline(always)]
-    // fn decode_e(&self, instr: code_t) -> (u8, u8, u8) {
-    //     let opcode: u8 = ((instr & MASK_OP) >> 11).try_into().unwrap();
-    //     let xd: u8 = ((instr & MASK_XD) >> 8).try_into().unwrap();
-    //     let imm8: u8 = ((instr & 0xFF)).try_into().unwrap();
-    //     (opcode,xd,imm8)
-    // }
+
     #[inline(always)]
     /// Instruction handler
     fn handle_instruction(&mut self, i: Instruction) {
@@ -324,7 +309,11 @@ impl ISA for ProcessingElement {
                 self.registers[rd] = self.registers[rd] & self.registers[rs];
                 self.registers[Register::IP] += 1;
             },
-            ASR(rs) => { todo!()},
+            ASR(rs) => { 
+                trace!("ASR {:?}", rs);
+                self.registers[rs] = ((self.reg(rs) as i16) >> 1) as register_t;
+                self.registers[Register::IP] += 1;
+            },
             BCLR(bit) => {
                 trace!("BCLR {bit}");
                 bit::clr(self.registers[Register::SREG], bit);
@@ -400,12 +389,12 @@ impl ISA for ProcessingElement {
                 self.registers[Register::IP] += 1; 
             },
             LDD(rd, imm) => {
-                trace!("LDD {:?}({}), {}",rd,self.reg(rd),imm);
+                debug!("LDD {:?}({}), {}",rd,self.reg(rd),imm);
                 self.registers[rd] = self.data[imm as usize];
                 self.registers[Register::IP] += 1; 
             },
             LDI(rd, imm) => {
-               trace!("LDI {:?}({}), {}",rd,self.reg(rd),imm);
+               debug!("LDI {:?}({}), {}",rd,self.reg(rd),imm);
                self.registers[rd] = imm;
                self.registers[Register::IP] += 1; 
             },
@@ -414,9 +403,16 @@ impl ISA for ProcessingElement {
                 self.registers[rd] = self.program[imm as usize];
                 self.registers[Register::IP] += 1;            
             },
-            LSL(r) => { todo!();
+            LSL(rd) => { 
+                trace!("LSL {:?}({})",rd,self.reg(rd));
+
+                todo!();
             },
-            LSR(r) => { todo!(); },
+            LSR(rd) => { 
+                trace!("LSR {:?}({})",rd,self.reg(rd));
+
+                todo!(); 
+            },
             MOV(rd, rs) => {
                 trace!("MOV {:?}({}), {:?}({})",rd,self.reg(rd),rs,self.reg(rs));
                 self.registers[rd] = self.registers[rs];
@@ -711,24 +707,43 @@ impl ISA for ProcessingElement {
 }
 impl Default for ProcessingElement {
     fn default() -> Self {
-        Self { 
-            registers: Default::default(), 
-            program: [0; FLASH_MAX], 
-            data: [0; SRAM_MAX], 
-            cache: Rc::new([0; L2_CACHE_MAX]), 
-            code: [NOP; INSTRUCTIONS_MAX], 
-            tracing: true, 
-            status: Status::Running 
-        }
+        trace!("ProcessingElement::default()");
+        ProcessingElement::new(Rc::new([0; L2_CACHE_MAX]), true, (1,1,1,1))
+        // let mut registers = RegisterFile::default();
+        // registers[Register::PE_ID] = 1;
+        // registers[Register::CU_ID] = 1;
+        // registers[Register::CG_ID] = 1;
+        // registers[Register::DEVICE_ID] = 1;        
+        // Self { 
+        //     registers, 
+        //     program: [0; FLASH_MAX], 
+        //     data: [0; SRAM_MAX], 
+        //     cache: Rc::new([0; L2_CACHE_MAX]), 
+        //     code: [NOP; INSTRUCTIONS_MAX], 
+        //     tracing: true, 
+        //     status: Status::Running 
+        // }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{emu::{builder::Builder, Register, isa::ISA}, asm::Instruction};
+    use std::str::FromStr;
 
+    use crate::{emu::{builder::Builder, Register, isa::ISA}, asm::Instruction};
     use super::ProcessingElement;
 
+    // from avr-vm
+    macro_rules! emulate {
+        ($code: expr; reg: $($reg: expr => $regval: expr), *; expect: $($regexp: expr => $regexpval: expr), *; flags: $flagval: expr) => {{
+            let mut pe = create($code);
+            $( *pe.reg_mut(Register::from($reg)) = $regval;)*
+           //$(pe.registers[$reg] = $regval;)*
+            while pe.tick_from_code() {}
+            $(assert_eq!(pe.reg(Register::from($regexp)), $regexpval);)*
+            assert_eq!($flagval, $flagval, "flags: {:#b}", $flagval);
+        }};
+    }
 
     #[test]
     fn from_builder() {
@@ -785,4 +800,44 @@ mod test {
         // } 
     }
 
+    #[test]
+    fn add() {
+        emulate!("add r0, r1";
+                reg: 0 => 10, 1 => 7;
+                expect: 0 => 17, 1 => 7;
+                flags: 0b00100000
+              );
+    }
+    #[test]
+    fn addi() {
+        emulate!("addi r4, 23";
+                reg: 4 => 100;
+                expect: 4 => 123;
+                flags: 0b00100000
+              );
+    }
+    #[test]
+    fn and() {
+        emulate!("and r3, r1";
+                reg: 3 => 420, 1 => 10;
+                expect: 3 => (420 & 10), 1 => 10;
+                flags: 0b00100000
+              );
+    }
+    #[test]
+    fn asr() {
+        emulate!("asr r0";
+                reg: 0 => (-2 as i16) as u16;
+                expect: 0 => (-1 as i16) as u16;
+                flags: 0b00100000
+              );
+    }
+
+
+    fn create(code: &str) -> ProcessingElement {
+        let bldr = Builder::from_str(code).unwrap();
+        let mut pe = ProcessingElement::default();
+        pe.from_builder(&bldr);
+        pe
+    }
 }

@@ -10,9 +10,10 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 
 use crate::types::table::{Dictionary, Table};
+use crate::types::to_byte_code::ToByteCode;
 use crate::types::{addr_t, self};
-use super::FLASH_MAX;
-use super::isa::Instruction;
+use super::{FLASH_MAX, INSTRUCTIONS_MAX, SRAM_MAX};
+use super::isa::{Instruction, ParseInstructionError};
 
 #[derive(Debug)]
 /// The Builder struct
@@ -31,8 +32,8 @@ impl Builder {
     pub fn new() -> Self {
 
         Builder {
-            instructions: vec![],
-            data: vec![],
+            instructions: vec![Instruction::HALT; INSTRUCTIONS_MAX],
+            data: vec![0; SRAM_MAX],
             labels: Dictionary::new(true),
         }
     }
@@ -58,14 +59,13 @@ impl Builder {
         trace!("Read {bytes} bytes");
         println!("{}", buf);
 
+        //self = Builder::from_str(buf.as_str()).unwrap();
         let mut lines = buf.lines();
         while let Some(line)= lines.next() {
             println!("Line: {}",line);
             let i = Instruction::from_str(line).unwrap();
             self.instructions.push(i);
-
         }
-
         //file.read_to_end(&mut bytes).unwrap();
         //assert!(bytes.len() < FLASH_MAX);
         self
@@ -97,6 +97,28 @@ impl Builder {
         self.instructions.is_empty()
     }
 
+}
+
+impl ToByteCode for Builder {
+    fn to_byte_code(&self, mut buf: &mut dyn Write) {
+        todo!()
+    }
+}
+
+impl FromStr for Builder {
+    type Err = ParseInstructionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let buf = String::from(s);
+        let mut lines = buf.lines();
+        let mut bldr = Builder::new();
+        while let Some(line)= lines.next() {
+            println!("Line: {}",line);
+            let i = Instruction::from_str(line)?;
+            bldr.instructions.push(i);
+        }
+        Ok(bldr)
+    }
 }
 
 #[cfg(test)]

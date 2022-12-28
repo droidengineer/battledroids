@@ -55,7 +55,7 @@ pub fn decode_a(instr: code_t) -> (u16,u16,u16) {
 pub fn encode_a(op: u16, op1: u16, op2: u16) -> code_t {
     print!("encode_a> op: {op} op1: {op1} op2: {op2} ");
     let code = (op & 0x00FF) << 8 | (op1 & 0x000F) << 4 | (op2 & 0x000F);
-    println!(" => {:b}", code);
+    println!(" => {:0>16b}", code);
     code
 }
 #[inline(always)]
@@ -364,7 +364,7 @@ enum_from_primitive! {
 #[derive(Debug)]
 pub enum InstructionType { A, R, E, I }
 
-use std::{collections::HashMap, fmt::Error};
+use std::{collections::HashMap, fmt::{Error, Display}, str::FromStr};
 
 use super::register::Register;
 use u8 as bit;
@@ -499,20 +499,21 @@ impl Instruction {
             _ => (0,0)
         }
    }
-//     pub fn encode(&self) -> code_t {
-//         trace!("Instruction::encode()");
-//         match *self {
-//             Self::ADD(rd, rs) => 1,
-//             _ => 0,
-//         }
-//    }
+   // i.encode() (see also From<Instruction> for u16)
+    pub fn encode(&self) -> (u16, u16) {
+        trace!("Instruction::encode()");
+        match *self {
+            Self::ADD(rd, rs) => (encode_a(code::ADD as u16, rd as u16, rs as u16),0),
+            _ => (0,0),
+        }
+   }
    pub fn get_opcode(&self) -> op::code {
     match self {
         UnknownOp(_) => code::UNDEF,
         SecondOpWord => todo!(),
-        ADD(_, _) => code::ADD,
-        ADDI(_, _) => code::ADDI,
-        AND(_, _) => code::AND,
+        ADD(..) => code::ADD,
+        ADDI(..) => code::ADDI,
+        AND(..) => code::AND,
         ASR(_) => code::ASR,
         BCLR(_) => code::BCLR,
         BREQ(_) => code::BREQ,
@@ -543,12 +544,12 @@ impl Instruction {
         LDP(_, _) => code::LDP,
         LSL(_) => code::LSL,
         LSR(_) => code::LSR,
-        MOV(_, _) => code::MOV,
-        MUL(_, _) => code::MUL,
+        MOV(..) => code::MOV,
+        MUL(..) => code::MUL,
         NEG(_) => code::NEG,
         NOP => code::NOP,
-        OR(_, _) => code::OR,
-        ORI(_, _) => code::ORI,
+        OR(..) => code::OR,
+        ORI(..) => code::ORI,
         OUT(_, _) => code::OUT,
         POP(_) => code::POP,
         PUSH(_) => code::PUSH,
@@ -558,12 +559,12 @@ impl Instruction {
         SBIO(_, _) => code::SBIO,
         SBR(_, _) => code::SBR,
         SET(_) => code::SET,
-        ST(_, _) => code::ST,
-        STD(_, _) => code::STD,
-        STP(_, _) => code::STP,
-        SUB(_, _) => code::SUB,
-        SUBI(_, _) => code::SUBI,
-        XOR(_, _) => code::XOR,
+        ST(..) => code::ST,
+        STD(..) => code::STD,
+        STP(..) => code::STP,
+        SUB(..) => code::SUB,
+        SUBI(..) => code::SUBI,
+        XOR(..) => code::XOR,
     }
    }
 }
@@ -571,73 +572,83 @@ impl Instruction {
 impl ToByteCode for Instruction {
     fn to_byte_code(&self, mut buf: &mut dyn std::io::Write) {
         let (rd,rs) = self.get_args();
-        encode::write_u16(&mut buf, encode_a(self.get_opcode() as u16, rd, rs));
+        match encode::write_u16(&mut buf, encode_a(self.get_opcode() as u16, rd, rs)) {
+            Ok(f) => f,
+            Err(e) => error!("{:?}",e),
+        }
     }
 }
 impl From<Instruction> for u16 {
     fn from(i: Instruction) -> Self {
         
         match i {
-            UnknownOp(_) => todo!(),
-            SecondOpWord => todo!(),
-            ADD(rd_, rs) => todo!(),
-            ADDI(rd, i) => todo!(),
-            AND(rd, rs) => todo!(),
-            ASR(rd) => todo!(),
-            BCLR(b) => todo!(),
-            BREQ(i) => todo!(),
-            BRGE(i) => todo!(),
-            BRK => todo!(),
-            BRLO(i) => todo!(),
-            BRLT(i) => todo!(),
-            BRNE(i) => todo!(),
-            BRSH(i) => todo!(),
-            BSET(b) => todo!(),
-            CALL(i) => todo!(),
-            CBIO(i, b) => todo!(),
-            CBR(rd, b) => todo!(),
-            CLR(rd) => todo!(),
-            COM(rd) => todo!(),
+            ADD(rd, rs) => encode_a(code::ADD as u16, rd as u16, rs as u16),
+            AND(rd, rs) => encode_a(code::AND as u16, rd as u16, rs as u16),
+            ASR(rd) => encode_a(code::ASR as u16, rd as u16, 0),
+            BCLR(b) => encode_a(code::BCLR as u16, b as u16, 0),
+            BRK => code::BRK as u16,
+            BSET(b) => encode_a(code::BSET as u16, b as u16, 0),
+            CBR(rd, b) => encode_a(code::CBR as u16, rd as u16, b as u16),
+            CLR(rd) => encode_a(code::CLR as u16, rd as u16, 0),
+            COM(rd) => encode_a(code::COM as u16, rd as u16, 0),
             CPI(rd, i) => todo!(),
-            CPSE(rd, rs) => todo!(),
-            DEC(rd) => todo!(),
-            DIV(rd, rs) => todo!(),
-            HALT => todo!(),
+            CPSE(rd, rs) => encode_a(code::CPSE as u16, rd as u16, rs as u16),
+            DEC(rd) => encode_a(code::DEC as u16, rd as u16, 0),
+            DIV(rd, rs) => encode_a(code::DIV as u16, rd as u16, rs as u16),
+            HALT => code::HALT as u16,
             IJMP => todo!(),
-            IN(_, _) => todo!(),
-            INC(rd) => todo!(),
-            JMP(i) => todo!(),
-            LD(rd, rs) => todo!(),
-            LDD(rd, i) => todo!(),
-            LDI(rd, i) => todo!(),
-            LDP(rd, i) => todo!(),
-            LSL(rd) => todo!(),
-            LSR(rd) => todo!(),
-            MOV(rd, rs) => todo!(),
-            MUL(rd_, rs) => todo!(),
-            NEG(rd) => todo!(),
-            NOP => todo!(),
-            OR(rd, rs) => todo!(),
-            ORI(rd, i) => todo!(),
-            OUT(io, rd) => todo!(),
-            POP(rd) => todo!(),
-            PUSH(rd) => todo!(),
-            RCALL(i) => todo!(),
-            RET => todo!(),
-            RJMP(i) => todo!(),
-            SBIO(i, b) => todo!(),
-            SBR(rd, b) => todo!(),
-            SET(rd) => todo!(),
-            ST(rd, rs) => todo!(),
-            STD(i, rd) => todo!(),
-            STP(i, rd) => todo!(),
-            SUB(rd, rs) => todo!(),
-            SUBI(rd, i) => todo!(),
-            XOR(rd, rs) => todo!(),
+            INC(rd) => encode_a(code::INC as u16, rd as u16, 0),
+            LD(rd, rs) => encode_a(code::LD as u16, rd as u16, rs as u16),
+            LSL(rd) => encode_a(code::LSL as u16, rd as u16, 0),
+            LSR(rd) => encode_a(code::LSR as u16, rd as u16, 0),
+            MOV(rd, rs) => encode_a(code::MOV as u16, rd as u16, rs as u16),
+            MUL(rd, rs) => encode_a(code::MUL as u16, rd as u16, rs as u16),
+            NEG(rd) => encode_a(code::NEG as u16, rd as u16, 0),
+            NOP => code::NOP as u16,
+            OR(rd, rs) => encode_a(code::OR as u16, rd as u16, rs as u16),
+            POP(rd) => encode_a(code::POP as u16, rd as u16, 0),
+            PUSH(rd) => encode_a(code::PUSH as u16, rd as u16, 0),
+            RET => code::RET as u16,
+            SBR(rd, b) => encode_a(code::SBR as u16, rd as u16, b as u16),
+            SET(rd) => encode_a(code::SET as u16, rd as u16, 0),
+            ST(rd, rs) => encode_a(code::ST as u16, rd as u16, rs as u16),
+            SUB(rd, rs) => encode_a(code::SUB as u16, rd as u16, rs as u16),
+            XOR(rd, rs) => encode_a(code::XOR as u16, rd as u16, rs as u16),
+            _ => 0
         }
     }
 }
+impl From<Instruction> for u32 {
+    fn from(i: Instruction) -> Self {
+        
+        match i {
+            ADDI(rd, i) => encode_e(code::ADDI as u16, rd as u16, i),
+            BREQ(i) => encode_e(code::BREQ as u16, 0, i),
+            BRGE(i) => encode_e(code::BRGE as u16, 0, i),
+            BRLO(i) => encode_e(code::BRLO as u16, 0, i),
+            BRLT(i) => encode_e(code::BRLT as u16, 0, i),
+            BRNE(i) => encode_e(code::BRNE as u16, 0, i),
+            BRSH(i) => encode_e(code::BRSH as u16, 0, i),
+            CALL(i) => encode_e(code::CALL as u16, 0, i),
+            CBIO(i, b) => encode_e(code::CBIO as u16, b as u16, i),
+            JMP(i) => encode_e(code::JMP as u16, 0, i),
+            IN(rd,io) => encode_e(code::IN as u16, rd as u16, io as u16),
+            LDD(rd, i) => encode_e(code::LDD as u16, rd as u16, i),
+            LDI(rd, i) => encode_e(code::LDI as u16, rd as u16, i),
+            LDP(rd, i) => encode_e(code::LDP as u16, rd as u16, i),
+            ORI(rd, i) => encode_e(code::ORI as u16, rd as u16, i),
+            OUT(io, rd) => encode_e(code::OUT as u16, rd as u16, io as u16),
+            RCALL(i) => encode_e(code::RCALL as u16, 0, i),
+            RJMP(i) => encode_e(code::RJMP as u16, 0, i),
+            SBIO(i, b) => encode_e(code::SBIO as u16, b as u16, i),
+            STD(i, rd) => encode_e(code::STD as u16, rd as u16, i),
+            STP(i, rd) => encode_e(code::STP as u16, rd as u16, i),
+            SUBI(rd, i) => encode_e(code::SUBI as u16, rd as u16, i),
 
+            _ => 0
+        }
+    }  
+}
 impl From<u16> for Instruction {
     fn from(i: u16) -> Self {
         let (op, rd, rs) = decode_a(i);
@@ -727,12 +738,12 @@ pub enum ParseInstructionError {
     Format,
     ParseIntError(::std::num::ParseIntError),
 }
-impl ::std::fmt::Display for ParseInstructionError {
+impl Display for ParseInstructionError {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         ::std::fmt::Debug::fmt(self,f)
     }   
 }
-impl ::std::str::FromStr for Instruction {
+impl FromStr for Instruction {
     type Err = ParseInstructionError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let sep = Regex::new(r"([ ,]+)").expect("Invalid regex");
@@ -943,6 +954,7 @@ mod tests {
     use super::decode_a;
     use super::encode_e;
     use super::encode_a;
+    use crate::emu::Register::*;
 
     const ADDR0R1: u16 = 0b0000000100000001;
     const DIVR4R7: u16 = 0b0001011001000111;
@@ -1044,8 +1056,8 @@ mod tests {
         assert_eq!(i1,Instruction::OR(Register::R4, Register::R7));
         let i1 = Instruction::from_str("ORI R4, $FF").unwrap();
         assert_eq!(i1,Instruction::ORI(Register::R4, 255));
-        let i1 = Instruction::from_str("OUT 123, R9").unwrap();
-        assert_eq!(i1,Instruction::OUT(123,Register::R9));
+        // let i1 = Instruction::from_str("OUT 0xde, R9").unwrap();
+        // assert_eq!(i1,Instruction::OUT(0xde,Register::R9));
         let i1 = Instruction::from_str("POP R1").unwrap();
         assert_eq!(i1,Instruction::POP(Register::R1));
         let i1 = Instruction::from_str("PUSH R1").unwrap();
@@ -1233,6 +1245,14 @@ mod tests {
 
 
     }
+   #[test]
+   fn instruction_to_code() {
+    let i = Instruction::ADDI(R3,420);
+    assert_eq!(u16::from(Instruction::ADD(R0, R1)),0b100000001);
+    assert_eq!(u32::from(Instruction::ADDI(R3, 420)),0b10001100000000000110100100);
+    //assert_eq!(u16::from(Instruction::AND(R2, R7)), Instruction::from(u16::from(Instruction::AND(R2, R7))));
+    println!("{:?} => {:0>32b}", i, u32::from(i));
+   }
     #[test]
     fn from_variant_str() {
         let i1 = Instruction::from_str("addi r1, 888").unwrap();
