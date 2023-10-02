@@ -7,7 +7,7 @@ use std::io::Read;
 
 /// Convert from bytecode to a type
 ///
-/// This trait represents the ability to load your Operands from bytecode.
+/// This trait represents the ability to load your CodeBytes from bytecode.
 
 pub trait FromByteCode {
     fn from_byte_code(_: &mut dyn Read) -> Self;

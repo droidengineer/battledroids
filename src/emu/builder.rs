@@ -26,6 +26,7 @@ pub struct Builder {
     pub instructions: Vec<Instruction>, // -> Code.code
     pub data: Vec<addr_t>, // -> Code.data
     pub labels: Dictionary<usize>, // -> Code.labels
+    pub program: Vec<u8>,       
 }
 
 impl Builder {
@@ -35,20 +36,21 @@ impl Builder {
             instructions: vec![Instruction::HALT; INSTRUCTIONS_MAX],
             data: vec![0; SRAM_MAX],
             labels: Dictionary::new(true),
+            program: vec![0; FLASH_MAX],
         }
     }
     pub fn push(&mut self, src: &str) {
         self.instructions.push(Instruction::from_str(src).unwrap());
     }
     fn push_data(&mut self, data: addr_t) -> usize {
-        let pos = self.data.iter().position(|d| d == &data);
-        match pos {
+        let pos = match self.data.iter().position(|d| d == &data) {
             Some(pos) => pos,
             None => {
                 self.data.push(data);
                 self.data.len() - 1
             }
-        }
+        };
+        pos
     }
 
     pub fn from_asm_file(&mut self, file: OsString) -> &mut Self {

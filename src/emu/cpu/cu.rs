@@ -25,9 +25,9 @@ impl ComputeUnit {
         let cu_id = ids.2;
         let mut n = 0;
         let cache = Rc::new([0;L2_CACHE_MAX]);
-        trace!("L2 Cache References: {}",Rc::strong_count(&cache));
+        debug!("L2 Cache References: {}",Rc::strong_count(&cache));
         while n != num_elem {
-            trace!("inside loop: {n}, Ref Ct: {}", Rc::strong_count(&cache));
+            debug!("inside loop: {n}, Ref Ct: {}", Rc::strong_count(&cache));
             let mut pe = ProcessingElement::new(Rc::clone(&cache), t,(ids.0,ids.1,cu_id,n as u16));
             let proc_id = pe.get_procid();
            println!("{} => {}", proc_id, proc_id.format());
@@ -42,6 +42,9 @@ impl ComputeUnit {
             thread.tick();
         }
         true      
+    }
+    pub fn assign_work(&mut self, code: Vec<addr_t>) {
+
     }
     pub fn postmortem(&self, pc: addr_t) {
         for thread in self.threads.iter() {

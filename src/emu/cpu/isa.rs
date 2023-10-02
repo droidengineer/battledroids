@@ -983,7 +983,6 @@ mod tests {
     fn instruction_from_string() {
         let i1 = Instruction::from_str("ADD R0, R1").unwrap();
         assert_eq!(i1,Instruction::ADD(Register::R0, Register::R1));
-
         let i1 = Instruction::from_str("ADDI R1, 0xfe").unwrap();
         assert_eq!(i1,Instruction::ADDI(Register::R1, 0xfe));   
         let i1 = Instruction::from_str("AND R1, R3").unwrap();

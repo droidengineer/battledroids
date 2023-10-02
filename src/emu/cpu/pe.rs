@@ -58,7 +58,11 @@ pub struct ProcessingElement {
 }
 static mut pid: u16 = 1;
 impl ProcessingElement {
-    pub fn new(cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>, t: bool, ids: (u16,u16,u16, u16)) -> ProcessingElement {
+    pub fn new(cache: Rc<[addr_t; crate::emu::L2_CACHE_MAX]>, 
+            t: bool, 
+            ids: (u16,u16,u16, u16)) 
+        
+    -> ProcessingElement {
         trace!("ProcessingElement::new({}, {}, {:?})", cache.len(), t, ids);
         let mut registers = RegisterFile::default();
         registers[Register::PE_ID] = ids.3;
@@ -259,7 +263,7 @@ impl ProcessingElement {
     pub fn from_builder(&mut self, builder: &Builder) {
         trace!("from_builder({:?}",builder);
         let mut code = &mut builder.instructions.clone();
-        code.resize(INSTRUCTIONS_MAX, NOP);
+        code.resize(INSTRUCTIONS_MAX, HALT);
         self.code.copy_from_slice(&code);
         let mut data = &mut builder.data.clone();
         data.resize(SRAM_MAX, 0);

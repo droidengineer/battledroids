@@ -2,6 +2,7 @@ pub mod table;
 pub mod from_byte_code;
 pub mod to_byte_code;
 pub mod stack;
+pub mod flaken;
 
 use std::{env::temp_dir, ffi::OsString, str::FromStr, error::Error};
 use num_traits::Num;
